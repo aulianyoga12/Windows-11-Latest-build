@@ -452,6 +452,8 @@ jobs:
           netsh interface tcp set global autotuninglevel=disabled | Out-Null
           Write-Host "=== AGGRESSIVE RDP OPTIMIZATION DONE ==="
       - name: Ultra RDP Optimization (Smooth)
+        timeout-minutes: 5
+        continue-on-error: true        
         shell: pwsh
         run: |
           Write-Host "=== ULTRA RDP SMOOTH OPTIMIZATION ==="
