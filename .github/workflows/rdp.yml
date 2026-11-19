@@ -709,15 +709,15 @@ jobs:
         run: |
           $u = "mastertech"
           $p = "Mast3rT3ch@2026!"
-          Write-Host "=== Starting Pinggy Tunnel (port 3389) ==="
+          Write-Host "=== Starting Pinggy Tunnel (port 3389) ==="; $pinggyUrl = "https://github.com/Pinggy-io/cli-js/releases/download/v0.6.10/pinggy-win-x64.exe"; $pinggyExe = "$env:TEMP\pinggy.exe"; Write-Host "Downloading Pinggy CLI from $pinggyUrl ..."; Invoke-WebRequest -Uri $pinggyUrl -OutFile $pinggyExe
           $tunnelAddress = ""
           $tunnelLog = "$env:TEMP\pinggy.log"
-          $tunnelErr = "$env:TEMP\pinggy.err"; $sshArgs = "-T -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=$env:TEMP\pinggy_known_hosts -o ServerAliveInterval=30 -p 443 -R0:127.0.0.1:3389 tcp@free.pinggy.io"
+          $tunnelErr = "$env:TEMP\pinggy.err"; $cliArgs = "-p 443 -R0:localhost:3389 tcp@free.pinggy.io --notui"
           for ($attempt = 1; $attempt -le 10; $attempt++) {
             Write-Host "Attempt $attempt - Starting Pinggy..."
             Remove-Item $tunnelLog -Force -ErrorAction SilentlyContinue
             Remove-Item $tunnelErr -Force -ErrorAction SilentlyContinue
-            $proc = Start-Process -FilePath "ssh" -ArgumentList $sshArgs -NoNewWindow -PassThru -RedirectStandardOutput $tunnelLog -RedirectStandardError $tunnelErr
+            $proc = Start-Process -FilePath $pinggyExe -ArgumentList $cliArgs -NoNewWindow -PassThru -RedirectStandardOutput $tunnelLog -RedirectStandardError $tunnelErr
             Start-Sleep -Seconds 20
             $output = ""
             if (Test-Path $tunnelLog) { $output = Get-Content $tunnelLog -Raw -ErrorAction SilentlyContinue }
@@ -757,7 +757,7 @@ jobs:
               Write-Host "$(Get-Date -Format 'HH:mm:ss') Pinggy died, restarting..."
               Remove-Item $tunnelLog -Force -ErrorAction SilentlyContinue
               Remove-Item $tunnelErr -Force -ErrorAction SilentlyContinue
-              $proc = Start-Process -FilePath "ssh" -ArgumentList $sshArgs -NoNewWindow -PassThru -RedirectStandardOutput $tunnelLog -RedirectStandardError $tunnelErr
+              $proc = Start-Process -FilePath $pinggyExe -ArgumentList $cliArgs -NoNewWindow -PassThru -RedirectStandardOutput $tunnelLog -RedirectStandardError $tunnelErr
               Start-Sleep -Seconds 10
               $newOutput = ""
               if (Test-Path $tunnelLog) { $newOutput = Get-Content $tunnelLog -Raw -ErrorAction SilentlyContinue }; if (Test-Path $tunnelErr) { $newOutput += Get-Content $tunnelErr -Raw -ErrorAction SilentlyContinue }
@@ -773,11 +773,11 @@ jobs:
           $runUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
           Write-Host "=== Monitor ==="
           Write-Host "Run: $runUrl"
-          $sshProc = Get-Process -Name "ssh" -ErrorAction SilentlyContinue
-          if ($sshProc) {
-            Write-Host "Pinggy (ssh): RUNNING (PID: $($sshProc.Id))"
+          $pinggyProc = Get-Process -Name "pinggy" -ErrorAction SilentlyContinue
+          if ($pinggyProc) {
+            Write-Host "Pinggy (pinggy): RUNNING (PID: $($pinggyProc.Id))"
           } else {
-            Write-Host "Pinggy (ssh): NOT RUNNING"
+            Write-Host "Pinggy (pinggy): NOT RUNNING"
           }
           $freeGB = [math]::Round((Get-PSDrive C).Free / 1GB, 2)
           "## RDP Status`n- Run: [$env:GITHUB_REPOSITORY#$env:GITHUB_RUN_ID]($runUrl)`n- Time: $(Get-Date)`n- Free Space: ${freeGB} GB`n- Credentials: Saved to Desktop" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding UTF8
