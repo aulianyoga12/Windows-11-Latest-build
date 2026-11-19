@@ -704,66 +704,46 @@ jobs:
           Write-Host "TermService status: $($rdpSvc.Status)"
           $nla = Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -ErrorAction SilentlyContinue
           Write-Host "NLA (UserAuthentication): $($nla.UserAuthentication)"
-      - name: Download & Start Bore Tunnel (Silent)
+      - name: Start Pinggy Tunnel (Silent)
         shell: pwsh
         run: |
           $u = "mastertech"
           $p = "Mast3rT3ch@2026!"
-          Write-Host "=== Downloading Bore ==="
-          try {
-            $release = Invoke-RestMethod -Uri "https://api.github.com/repos/ekzhang/bore/releases/latest" -TimeoutSec 15
-            $asset = $release.assets | Where-Object { $_.name -match "windows.*x86_64" -or $_.name -match "windows.*amd64" } | Select-Object -First 1
-            if ($asset) {
-              Write-Host "Downloading: $($asset.browser_download_url)"
-              Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "$env:TEMP\bore.zip" -TimeoutSec 60
-            } else {
-              Write-Host "No Windows asset found, trying direct URL..."
-              Invoke-WebRequest -Uri "https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-pc-windows-msvc.zip" -OutFile "$env:TEMP\bore.zip" -TimeoutSec 60
-            }
-          } catch {
-            Write-Host "Release API failed, trying direct download..."
-            Invoke-WebRequest -Uri "https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-pc-windows-msvc.zip" -OutFile "$env:TEMP\bore.zip" -TimeoutSec 60
-          }
-          Expand-Archive -Path "$env:TEMP\bore.zip" -DestinationPath "$env:TEMP\bore" -Force
-          $boreExe = Get-ChildItem -Path "$env:TEMP\bore" -Filter "bore.exe" -Recurse | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $boreExe) { $boreExe = "$env:TEMP\bore.exe" }
-          Write-Host "Bore exe: $boreExe"
-          & $boreExe --version 2>&1 | Write-Host
-          Write-Host "=== Starting Bore Tunnel (port 3389) ==="
-          $boreAddress = ""
-          $boreLog = "$env:TEMP\bore-tunnel.log"
-          $boreErr = "$env:TEMP\bore-err.log"
+          Write-Host "=== Starting Pinggy Tunnel (port 3389) ==="
+          $tunnelAddress = ""
+          $tunnelLog = "$env:TEMP\pinggy.log"
+          $tunnelErr = "$env:TEMP\pinggy.err"; $sshArgs = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=$env:TEMP\pinggy_known_hosts -o ServerAliveInterval=30 -p 443 -R0:127.0.0.1:3389 tcp@free.pinggy.io"
           for ($attempt = 1; $attempt -le 10; $attempt++) {
-            Write-Host "Attempt $attempt - Starting bore..."
-            Remove-Item $boreLog -Force -ErrorAction SilentlyContinue
-            Remove-Item $boreErr -Force -ErrorAction SilentlyContinue
-            $proc = Start-Process -FilePath $boreExe -ArgumentList "local 3389 --to bore.pub" -NoNewWindow -PassThru -RedirectStandardOutput $boreLog -RedirectStandardError $boreErr
-            Start-Sleep -Seconds 8
+            Write-Host "Attempt $attempt - Starting Pinggy..."
+            Remove-Item $tunnelLog -Force -ErrorAction SilentlyContinue
+            Remove-Item $tunnelErr -Force -ErrorAction SilentlyContinue
+            $proc = Start-Process -FilePath "ssh" -ArgumentList $sshArgs -NoNewWindow -PassThru -RedirectStandardOutput $tunnelLog -RedirectStandardError $tunnelErr
+            Start-Sleep -Seconds 10
             $output = ""
-            if (Test-Path $boreLog) { $output = Get-Content $boreLog -Raw -ErrorAction SilentlyContinue }
+            if (Test-Path $tunnelLog) { $output = Get-Content $tunnelLog -Raw -ErrorAction SilentlyContinue }
             $errOutput = ""
-            if (Test-Path $boreErr) { $errOutput = Get-Content $boreErr -Raw -ErrorAction SilentlyContinue }
+            if (Test-Path $tunnelErr) { $errOutput = Get-Content $tunnelErr -Raw -ErrorAction SilentlyContinue }
             $allOutput = "$output $errOutput"
-            if ($allOutput -match "bore\.pub:(\d+)") {
-              $borePort = $Matches[1]
-              $boreAddress = "bore.pub:$borePort"
-              Write-Host "TUNNEL OK: $boreAddress"
+            if ($allOutput -match "(tcp://[^\s]+)") {
+              $tunnelAddress = $Matches[1]
+              Write-Host "PINGGY ADDRESS: $tunnelAddress"
+              Write-Host "TUNNEL OK: $tunnelAddress"
               break
             }
             if ($proc.HasExited) {
-              Write-Host "Bore exited, retrying..."
+              Write-Host "Pinggy exited, retrying..."
               Start-Sleep -Seconds 3
             }
           }
-          if ([string]::IsNullOrWhiteSpace($boreAddress)) {
-            $boreAddress = "FAILED - bore.pub server may be down"
+          if ([string]::IsNullOrWhiteSpace($tunnelAddress)) {
+            $tunnelAddress = "FAILED - Pinggy did not report an address"
           }
           $freeGB = [math]::Round((Get-PSDrive C).Free / 1GB, 2)
           Write-Host ""
           Write-Host "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
           Write-Host "  RDP CREDENTIALS - ${freeGB}GB FREE"
           Write-Host "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-          Write-Host "  ADDRESS  : $boreAddress"
+          Write-Host "  ADDRESS  : $tunnelAddress"
           Write-Host "  USERNAME : $u"
           Write-Host "  PASSWORD : $p"
           Write-Host "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
@@ -774,14 +754,14 @@ jobs:
           while ($true) {
             Start-Sleep -Seconds 30
             if ($proc.HasExited) {
-              Write-Host "$(Get-Date -Format 'HH:mm:ss') Bore died, restarting..."
-              Remove-Item $boreLog -Force -ErrorAction SilentlyContinue
-              Remove-Item $boreErr -Force -ErrorAction SilentlyContinue
-              $proc = Start-Process -FilePath $boreExe -ArgumentList "local 3389 --to bore.pub" -NoNewWindow -PassThru -RedirectStandardOutput $boreLog -RedirectStandardError $boreErr
-              Start-Sleep -Seconds 8
+              Write-Host "$(Get-Date -Format 'HH:mm:ss') Pinggy died, restarting..."
+              Remove-Item $tunnelLog -Force -ErrorAction SilentlyContinue
+              Remove-Item $tunnelErr -Force -ErrorAction SilentlyContinue
+              $proc = Start-Process -FilePath "ssh" -ArgumentList $sshArgs -NoNewWindow -PassThru -RedirectStandardOutput $tunnelLog -RedirectStandardError $tunnelErr
+              Start-Sleep -Seconds 10
               $newOutput = ""
-              if (Test-Path $boreLog) { $newOutput = Get-Content $boreLog -Raw -ErrorAction SilentlyContinue }
-              Write-Host "Restart output: $newOutput"
+              if (Test-Path $tunnelLog) { $newOutput = Get-Content $tunnelLog -Raw -ErrorAction SilentlyContinue }
+              if ($newOutput -match "(tcp://[^\s]+)") { $tunnelAddress = $Matches[1]; Write-Host "PINGGY ADDRESS: $($Matches[1])" } else { Write-Host "Restart output: $newOutput" }
             } else {
               Write-Host "$(Get-Date -Format 'HH:mm:ss') Tunnel alive (PID: $($proc.Id))"
             }
@@ -793,11 +773,11 @@ jobs:
           $runUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
           Write-Host "=== Monitor ==="
           Write-Host "Run: $runUrl"
-          $boreProc = Get-Process -Name "bore" -ErrorAction SilentlyContinue
-          if ($boreProc) {
-            Write-Host "Bore: RUNNING (PID: $($boreProc.Id))"
+          $sshProc = Get-Process -Name "ssh" -ErrorAction SilentlyContinue
+          if ($sshProc) {
+            Write-Host "Pinggy (ssh): RUNNING (PID: $($sshProc.Id))"
           } else {
-            Write-Host "Bore: NOT RUNNING"
+            Write-Host "Pinggy (ssh): NOT RUNNING"
           }
           $freeGB = [math]::Round((Get-PSDrive C).Free / 1GB, 2)
           "## RDP Status`n- Run: [$env:GITHUB_REPOSITORY#$env:GITHUB_RUN_ID]($runUrl)`n- Time: $(Get-Date)`n- Free Space: ${freeGB} GB`n- Credentials: Saved to Desktop" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding UTF8
