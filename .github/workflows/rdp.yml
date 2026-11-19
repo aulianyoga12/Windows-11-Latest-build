@@ -760,7 +760,7 @@ jobs:
               $proc = Start-Process -FilePath $pinggyExe -ArgumentList $cliArgs -NoNewWindow -PassThru -RedirectStandardOutput $tunnelLog -RedirectStandardError $tunnelErr
               Start-Sleep -Seconds 10
               $newOutput = ""
-              if (Test-Path $tunnelLog) { $newOutput = Get-Content $tunnelLog -Raw -ErrorAction SilentlyContinue }; if (Test-Path $tunnelErr) { $newOutput += Get-Content $tunnelErr -Raw -ErrorAction SilentlyContinue }; if (Test-Path $tunnelErr) { $newOutput += Get-Content $tunnelErr -Raw -ErrorAction SilentlyContinue }
+              if (Test-Path $tunnelLog) { $newOutput = Get-Content $tunnelLog -Raw -ErrorAction SilentlyContinue }; if (Test-Path $tunnelErr) { $newOutput += Get-Content $tunnelErr -Raw -ErrorAction SilentlyContinue }
               if ($newOutput -match "(tcp://[^\s]+)") { $tunnelAddress = $Matches[1]; Write-Host "PINGGY ADDRESS: $($Matches[1])" } else { Write-Host "Restart output: $newOutput" }
             } else {
               Write-Host "$(Get-Date -Format 'HH:mm:ss') Tunnel alive (PID: $($proc.Id))"
